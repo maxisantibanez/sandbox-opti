@@ -1,0 +1,57 @@
+{
+  "variables": [
+    {
+      "id": "x1",
+      "name": "Producto A",
+      "type": "continuous",
+      "lowerBound": 0,
+      "upperBound": null
+    },
+    {
+      "id": "x2",
+      "name": "Producto B",
+      "type": "continuous",
+      "lowerBound": 0,
+      "upperBound": null
+    }
+  ],
+  "objective": {
+    "sense": "maximize",
+    "terms": [
+      { "variableId": "x1", "coefficient": 40 },
+      { "variableId": "x2", "coefficient": 30 }
+    ]
+  },
+  "constraints": [
+    {
+      "id": "machine",
+      "name": "Capacidad de máquina",
+      "terms": [
+        { "variableId": "x1", "coefficient": 2 },
+        { "variableId": "x2", "coefficient": 1 }
+      ],
+      "operator": "<=",
+      "rhs": 100
+    },
+    {
+      "id": "labor",
+      "name": "Mano de obra",
+      "terms": [
+        { "variableId": "x1", "coefficient": 1 },
+        { "variableId": "x2", "coefficient": 2 }
+      ],
+      "operator": "<=",
+      "rhs": 80
+    },
+    {
+      "id": "packaging",
+      "name": "Empaque",
+      "terms": [
+        { "variableId": "x1", "coefficient": 1 },
+        { "variableId": "x2", "coefficient": 1 }
+      ],
+      "operator": "<=",
+      "rhs": 100
+    }
+  ]
+}

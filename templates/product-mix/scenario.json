@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "id": "product-mix",
+    "name": "Product Mix",
+    "description": "Producción de dos productos sujeta a capacidad de máquina, mano de obra y empaque.",
+    "category": "production"
+  },
+  "variableBindings": [
+    { "variableId": "x1", "role": "product" },
+    { "variableId": "x2", "role": "product" }
+  ],
+  "constraintBindings": [
+    { "constraintId": "machine", "role": "resource-capacity" },
+    { "constraintId": "labor", "role": "resource-capacity" },
+    { "constraintId": "packaging", "role": "resource-capacity" }
+  ]
+}

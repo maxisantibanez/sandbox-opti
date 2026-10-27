@@ -1,0 +1,213 @@
+"use client";
+
+import { useRef, useState } from "react";
+
+import { ModelEditor } from "@/components/model-editor";
+import { ModelStart } from "@/components/model-start";
+import { GeometricView } from "@/components/geometric-view";
+import { ResultsPanel } from "@/components/results-panel";
+import { createBlankModel } from "@/lib/blank-model";
+import type { OptimizationModel, OptimizationResult } from "@/lib/model";
+import {
+  categoryLabel,
+  pruneScenario,
+  type ScenarioDefinition,
+} from "@/lib/scenario";
+import type { Template } from "@/lib/templates";
+import {
+  solveModel,
+  SolveRequestError,
+  type SolveIssue,
+} from "@/lib/solve";
+
+interface RequestError {
+  message: string;
+  issues: SolveIssue[];
+}
+
+type SolveOutcome =
+  | {
+      kind: "result";
+      model: OptimizationModel;
+      result: OptimizationResult;
+    }
+  | {
+      kind: "error";
+      model: OptimizationModel;
+      error: RequestError;
+    };
+
+/**
+ * The model being edited plus, optionally, the semantics of the template it came
+ * from. Exactly one OptimizationModel lives here; the scenario only references it
+ * by stable ids and is never sent to the solver.
+ */
+interface Workspace {
+  title: string;
+  subtitle: string;
+  model: OptimizationModel;
+  scenario: ScenarioDefinition | null;
+}
+
+function blankWorkspace(): Workspace {
+  return {
+    title: "Modelo en blanco",
+    subtitle: "Sin semántica · LP continuo",
+    model: createBlankModel(),
+    scenario: null,
+  };
+}
+
+function templateWorkspace(template: Template): Workspace {
+  const { metadata } = template.scenario;
+
+  return {
+    title: metadata.name,
+    subtitle: `${categoryLabel(metadata.category)} · LP continuo`,
+    model: structuredClone(template.model),
+    scenario: template.scenario,
+  };
+}
+
+export function Sandbox() {
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [isChoosing, setIsChoosing] = useState(false);
+  const [outcome, setOutcome] = useState<SolveOutcome | null>(null);
+  const [isSolving, setIsSolving] = useState(false);
+  const [highlightedConstraintId, setHighlightedConstraintId] = useState<string | null>(null);
+  // Bumped whenever a different model replaces the workspace, so a solver
+  // response that belongs to the previous model is discarded.
+  const sessionRef = useRef(0);
+
+  const result = outcome?.kind === "result" ? outcome.result : null;
+  const error = outcome?.kind === "error" ? outcome.error : null;
+
+  function openWorkspace(next: Workspace) {
+    sessionRef.current += 1;
+    setWorkspace(next);
+    setIsChoosing(false);
+    setIsSolving(false);
+    setOutcome(null);
+    setHighlightedConstraintId(null);
+  }
+
+  function handleModelChange(next: OptimizationModel) {
+    setWorkspace((current) =>
+      current
+        ? {
+            ...current,
+            model: next,
+            scenario: pruneScenario(current.scenario, next),
+          }
+        : current,
+    );
+    // A failed attempt describes a model that no longer exists once it changes.
+    setOutcome((current) => (current?.kind === "error" ? null : current));
+  }
+
+  async function handleSolve() {
+    if (!workspace) {
+      return;
+    }
+
+    const modelToSolve = workspace.model;
+    const session = sessionRef.current;
+
+    setIsSolving(true);
+    setOutcome(null);
+
+    try {
+      const solved = await solveModel(modelToSolve);
+      if (session !== sessionRef.current) {
+        return;
+      }
+      setOutcome({ kind: "result", model: modelToSolve, result: solved });
+    } catch (cause) {
+      if (session !== sessionRef.current) {
+        return;
+      }
+      const requestError: RequestError =
+        cause instanceof SolveRequestError
+          ? { message: cause.message, issues: cause.issues }
+          : {
+              message: "Ocurrió un error inesperado al resolver el modelo.",
+              issues: [],
+            };
+
+      setOutcome({ kind: "error", model: modelToSolve, error: requestError });
+    } finally {
+      if (session === sessionRef.current) {
+        setIsSolving(false);
+      }
+    }
+  }
+
+  if (workspace === null || isChoosing) {
+    return (
+      <ModelStart
+        onBlank={() => openWorkspace(blankWorkspace())}
+        onTemplate={(template) => openWorkspace(templateWorkspace(template))}
+        onCancel={workspace ? () => setIsChoosing(false) : undefined}
+      />
+    );
+  }
+
+  const { model } = workspace;
+  const isStale = outcome?.kind === "result" && outcome.model !== model;
+  const resultModel = outcome?.kind === "result" ? outcome.model : model;
+
+  return (
+    <>
+      <div className="sandbox-workspace">
+        <div className="model-workspace">
+          <p className="scenario-tag">
+            <span className="scenario-name">{workspace.title}</span>
+            <span className="scenario-meta">{workspace.subtitle}</span>
+          </p>
+          <ModelEditor
+            model={model}
+            scenario={workspace.scenario}
+            onChange={handleModelChange}
+            highlightedConstraintId={highlightedConstraintId}
+            onHighlight={setHighlightedConstraintId}
+          />
+          <div className="action-row">
+            <button
+              type="button"
+              className="solve-button"
+              onClick={handleSolve}
+              disabled={isSolving}
+            >
+              {isSolving ? "Resolviendo…" : "Resolver modelo"}
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setIsChoosing(true)}
+            >
+              Nuevo modelo
+            </button>
+          </div>
+        </div>
+        <GeometricView
+          model={model}
+          result={isStale ? null : result}
+          isStale={isStale}
+          highlightedConstraintId={highlightedConstraintId}
+          onHighlight={setHighlightedConstraintId}
+        />
+      </div>
+
+      <div aria-live="polite" aria-busy={isSolving}>
+        <ResultsPanel
+          model={resultModel}
+          result={result}
+          error={error}
+          isSolving={isSolving}
+          isStale={isStale}
+          onResolve={handleSolve}
+        />
+      </div>
+    </>
+  );
+}
