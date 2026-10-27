@@ -1,16 +1,20 @@
 # CURRENT_STATE — Optimization Sandbox
 
 **Última actualización:** 2026-10-27
-**Estado:** M1, M2A, M2B, M3 y M4 completados y verificados.
+**Estado:** M1, M2A, M2B, M3, M4 y M5 completados y verificados.
 **Propósito de este documento:** dar a un agente nuevo el contexto mínimo para continuar el proyecto leyendo el repositorio, sin sustituir a la documentación de referencia.
 
 ---
 
 ## 1. Visión actual del producto
 
-Optimization Sandbox es un laboratorio interactivo de optimización matemática. La matemática es el
-núcleo y la interfaz debe hacerla visible y manipulable, no ocultarla detrás de un formulario o de un
-dashboard.
+Optimization Sandbox es un sandbox de modelamiento matemático para optimización. El usuario construye
+un modelo (variables, función objetivo, restricciones) y la aplicación le ayuda a comprender tanto
+su formulación matemática como el sistema que ese modelo representa. La matemática es el núcleo y la
+interfaz debe hacerla visible y manipulable, no ocultarla detrás de un formulario o de un dashboard.
+
+La programación lineal continua es la primera familia de modelos soportada y el mecanismo con el que
+se valida la arquitectura; no es la identidad del producto.
 
 El principio de producto es una cadena única y explícita:
 
@@ -33,9 +37,11 @@ La visión completa está en [`VISION.md`](../VISION.md); el alcance original de
 | **M2B** | Completado | Model Builder: agregar y eliminar variables, términos y restricciones; renombrado inline. |
 | **M3** | Completado | Motor geométrico 2D, renderer SVG, óptimo vigente, exploración por ID y layout de sandbox. |
 | **M4** | Completado | Templates como datos, modelo en blanco, `ScenarioDefinition` separado del modelo y roles semánticos visibles. |
+| **M5** | Completado | Scenario View 3D de Product Mix: sistema modelado derivado del modelo, estado de la solución vigente, panel Visualización y hover sincronizado con el editor. |
 
-No hay milestones posteriores a M4 implementados. El detalle de M3 está en la sección 21 y en
-[`GEOMETRY.md`](./GEOMETRY.md); el de M4, en la sección 22 y en [`SCENARIOS.md`](./SCENARIOS.md).
+No hay milestones posteriores a M5 implementados. El detalle de M3 está en la sección 21 y en
+[`GEOMETRY.md`](./GEOMETRY.md); el de M4, en la sección 22 y en [`SCENARIOS.md`](./SCENARIOS.md); el
+de M5, en la sección 24 y en [`SCENARIO_3D.md`](./SCENARIO_3D.md).
 
 ---
 
@@ -187,7 +193,8 @@ la geometría se actualiza sin esperar una nueva resolución.
 │   ├── MODEL_SPEC.md                 contrato canónico (autoritativo)
 │   ├── ARCHITECTURE.md               arquitectura y decisiones
 │   ├── GEOMETRY.md                   M3: geometría 2D
-│   └── SCENARIOS.md                  M4: templates y ScenarioDefinition
+│   ├── SCENARIOS.md                  M4: templates y ScenarioDefinition
+│   └── SCENARIO_3D.md                M5: Scenario View y Production Floor 3D
 ├── templates/
 │   └── product-mix/
 │       ├── model.json                modelo de demostración compartido
@@ -206,7 +213,10 @@ la geometría se actualiza sin esperar una nueva resolución.
     │   ├── page.tsx                  página única
     │   └── globals.css               estética editorial y estilos del editor
     ├── components/
-    │   ├── sandbox.tsx               estado del modelo, resolución, staleness
+    │   ├── sandbox.tsx               estado del modelo, resolución, staleness, highlight compartido
+    │   ├── visualization-panel.tsx   panel Visualización con tabs Geometría / Escenario (M5)
+    │   ├── scenario-views.ts         registro escenario → vista (M5)
+    │   ├── scenario/                 Product Mix: texto del sistema, canvas R3F, error boundary (M5)
     │   ├── geometric-view.tsx        renderer SVG y exploración de geometría 2D
     │   ├── model-editor.tsx          expresión editable y constructor del modelo
     │   ├── math-number-input.tsx     campo numérico inline con borrador transitorio
@@ -218,6 +228,10 @@ la geometría se actualiza sin esperar una nueva resolución.
     │   ├── blank-model.ts            modelo en blanco (M4)
     │   ├── scenario.ts               ScenarioDefinition, roles y poda de bindings (M4)
     │   ├── templates.ts              registro de templates (M4)
+    │   ├── product-mix-scene.ts      sistema modelado + estado de la solución (M5, puro)
+    │   ├── product-mix-layout.ts     normalización y escala visual de la escena (M5, puro)
+    │   ├── highlight.ts              foco de presentación compartido (M5)
+    │   ├── webgl.ts                  detección de WebGL en el cliente (M5)
     │   ├── model-editing.ts          actualizaciones puras e inmutables (M2A + M2B)
     │   ├── number-input.ts           parseo/formato de números editables
     │   ├── format.ts                 formato de resultados
@@ -237,6 +251,10 @@ Tests:
 - `web/components/sandbox.test.tsx`
 - `web/lib/geometry.test.ts`
 - `web/components/geometric-view.test.tsx`
+- `web/lib/scenario.test.ts`
+- `web/lib/workspace.test.ts`
+- `web/lib/product-mix-scene.test.ts`
+- `web/components/scenario-view.test.tsx`
 
 ---
 
@@ -450,7 +468,7 @@ El modelo cambió desde la última resolución.   [Resolver nuevamente]
 - API: un campo `scenario` se rechaza con `422` (la semántica no llega al solver);
 - API: un LP sin restricciones (modelo en blanco) se resuelve y da `unbounded`.
 
-### Frontend — 128 tests
+### Frontend — 189 tests
 
 
 - parseo y formato de números editables (coma, punto, exponente, incompletos);
@@ -473,6 +491,12 @@ El modelo cambió desde la última resolución.   [Resolver nuevamente]
 - M4, interfaz: selector inicial, modelo en blanco, Product Mix con roles visibles, renombrado sin
   pérdida de rol, eliminación y reutilización de ids, payload exacto a `/solve`, cambio y cancelación
   de modelo, y descarte de respuestas tardías de un modelo anterior.
+- M5, capa pura (38): sistema antes de resolver, consumos y capacidades desde el modelo, límites
+  teóricos por recurso, coeficiente objetivo neutral, interpretabilidad del rol, descomposición `a·x`
+  frente a `activity`, obsolescencia, entidades sin semántica, normalización y layout.
+- M5, interfaz (23): tabs, alternancia sin pérdida del modelo, invalidación al editar, nueva
+  resolución, infactible/no acotado, hover editor ↔ escena por restricción y por término, desmontaje,
+  preferencia de vista, fallos de WebGL y SSR.
 
 ### Verificación E2E
 
@@ -565,7 +589,7 @@ npm run build
 Estado verificado en la última ejecución:
 
 - backend: **24 passed**;
-- frontend: **128 passed**;
+- frontend: **189 passed**;
 - `npm run build`: correcto.
 
 ---
@@ -573,8 +597,9 @@ Estado verificado en la última ejecución:
 ## 18. Funcionalidades explícitamente fuera de alcance
 
 - Parser de texto libre o sintaxis tipo AMPL.
-- Vista geométrica 3D, Three.js, zoom/pan avanzado y animación de la función objetivo.
-- Persistencia, historial, undo/redo, editor de bindings y Scenario View (3D).
+- Vista geométrica 3D (tres variables), zoom/pan avanzado y animación de la función objetivo.
+- Persistencia, historial, undo/redo y editor de bindings.
+- Escenas 3D para otros templates, assets externos, simulación temporal o postprocessing.
 - Autenticación, base de datos, colaboración o IA.
 - Variables enteras, binarias, MILP, optimización no lineal o multiobjetivo.
 - Cambios de arquitectura que introduzcan una representación paralela del modelo.
@@ -592,6 +617,7 @@ Cualquier extensión debe actualizar `MODEL_SPEC.md` y conservar el contrato can
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — componentes, flujo y decisiones (D1–D11).
 - [`GEOMETRY.md`](./GEOMETRY.md) — M3, algoritmo, precisión, viewport y validación.
 - [`SCENARIOS.md`](./SCENARIOS.md) — M4, ScenarioDefinition, bindings, lifecycle y templates.
+- [`SCENARIO_3D.md`](./SCENARIO_3D.md) — M5, Scenario View, Production Floor, estados y validación.
 
 ---
 
@@ -686,3 +712,47 @@ Sin nuevas funcionalidades matemáticas ni visualizaciones.
 - **Fuera de alcance:** sin persistencia, sin `beforeunload` ni protecciones del navegador.
 
 Estado verificado: backend **24 passed**, frontend **128 passed**, `npm run build` correcto.
+
+---
+
+## 24. Estado de M5 — Scenario View 3D (Product Mix)
+
+**M5 completado.** La vista de escenario representa **el sistema modelado**; la solución de HiGHS se
+añade después como estado de ese sistema.
+
+- **Panel Visualización:** la segunda columna tiene tabs Geometría y, si el escenario tiene una vista
+  registrada, Escenario. Blank Model solo ofrece Geometría. Geometría es la vista inicial y la
+  elección se recuerda durante la sesión.
+- **Capa pura (M5A):** `buildProductMixScene` separa `definition` y `solution`:
+  - `definition`: productos, recursos, capacidad desde `rhs`, consumos desde coeficientes, «aporte a
+    Z por unidad», límites teóricos por recurso e interpretabilidad del rol;
+  - `solution`: cantidades, `activity`/`slack`/`active` del backend y explicación `a·x` comprobada
+    contra `activity` con tolerancia `1e-7` relativa.
+
+  `layoutProductMixScene` normaliza: capacidad local por recurso, canales relativos dentro del
+  recurso y columnas relativas entre productos.
+- **Renderer (M5B):** `three` + `@react-three/fiber`, sin `drei` ni assets.
+  - Escena bipartita: productos al frente y recursos al fondo como recipientes, unidos por canales.
+  - Segmentos por producto, holgura visible y tapa para recursos activos.
+  - Cámara orbital limitada, `frameloop="demand"`, etiquetas HTML proyectadas y transiciones breves.
+- **Integración (M5C):** registro `scenario-views.ts`, carga diferida `ssr: false`, error boundary y
+  detección de WebGL con fallback. Debajo del canvas, una leyenda textual del sistema. `Highlight`
+  compartido: recurso ↔ restricción, producto ↔ sus términos, canal ↔ término exacto.
+- **Obsolescencia:** la solución solo cuenta si `solved.model === model`. Al editar, el sistema se
+  actualiza al instante y desaparecen cantidades, rellenos y tapas hasta resolver de nuevo.
+- **Identidad del producto:** la página, el README y la arquitectura describen un sandbox de
+  modelamiento matemático para optimización; LP continuo queda como primera familia soportada.
+- **Sin cambios** en `OptimizationModel`, `OptimizationResult`, `ScenarioDefinition`, `/solve` ni el
+  backend.
+
+Verificación manual con FastAPI + HiGHS reales:
+
+- Product Mix `40/20/2200` con Máquina `80 + 20`, Mano de obra `40 + 40` y Empaque al 60 %.
+- Capacidad `100 → 120`: obsolescencia inmediata; resolver de nuevo da `53,3333/13,3333/2533,3333`.
+- Hover de los 11 objetos de la escena, renombrado, eliminación de un producto, variable sin
+  semántica, Empaque `≥` (no interpretable e infactible).
+- Cambio a Blank y vuelta a Product Mix, y móvil de 375 px.
+
+Pasos y limitaciones en [`SCENARIO_3D.md`](./SCENARIO_3D.md).
+
+Estado verificado: backend **24 passed**, frontend **189 passed**, `npm run build` correcto.

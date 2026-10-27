@@ -23,7 +23,7 @@ OptimizationModel ──────────────→ Solver (/solve) 
         │
 ScenarioDefinition ─┐
         │           │
-        └───────────┴──→ Scenario View (futura, M5+)
+        └───────────┴──→ Scenario View (M5) ←── OptimizationResult vigente
 ```
 
 `OptimizationModel` no contiene nada de dominio: no hay etiquetas de escena, objetos 3D ni tipos de
@@ -171,20 +171,40 @@ conocidos.
 
 ---
 
-## 9. Relación futura con Scenario View
+## 9. Reglas de lectura de los roles y Scenario View
 
-La vista 3D de un escenario consumirá tres entradas: `OptimizationModel`, `ScenarioDefinition` y
-`OptimizationResult`. El escenario decidirá qué entidades representar y cómo; el modelo seguirá
-siendo la fuente matemática, y el resultado aportará las cantidades (valores de variables, holguras).
+Desde M5 la vista de escenario consume tres entradas sin modificarlas:
 
-Esta etapa no implementa nada de eso. No hay Three.js, cámara, escenas, assets ni un motor universal
-de escenas. El contrato de bindings es lo único que se prepara.
+```text
+ScenarioDefinition  → qué significa cada entidad
+OptimizationModel   → cómo se relacionan (coeficientes, capacidades)
+OptimizationResult  → qué solución produjo el solver
+```
+
+Cada rol define una **regla de lectura** del modelo, de modo que las relaciones no se duplican en
+`scenario.json`:
+
+| Rol | Entidad | Lectura |
+| --- | --- | --- |
+| `product` | variable | decisión de producción; su coeficiente objetivo es el «aporte a Z por unidad», sin semántica de beneficio o coste |
+| `resource-capacity` | restricción | recurso con capacidad `rhs`; el coeficiente de cada `product` es su consumo por unidad |
+
+La lectura de capacidad solo se aplica si la forma es compatible: operador `<=`, `rhs >= 0`,
+coeficientes de productos ≥ 0 y productos con `lowerBound >= 0`. Si una edición rompe alguna
+condición, la vista marca el recurso como «no interpretable como capacidad» y no lo reinterpreta.
+Las variables sin binding que aparecen en un recurso cuentan como uso sin representación.
+
+`capacity / coefficient` se muestra como **límite teórico impuesto por este recurso**, nunca como
+máximo global del producto. La implementación, la escena *Production Floor* y sus estados están en
+[`SCENARIO_3D.md`](./SCENARIO_3D.md).
 
 ---
 
 ## 10. Limitaciones actuales
 
-- Solo hay dos roles: `product` (variables) y `resource-capacity` (restricciones).
+- Solo hay dos roles: `product` (variables) y `resource-capacity` (restricciones), y una vista de
+  escenario (Product Mix).
+- El escenario no define unidades ni la semántica del objetivo; la vista no las inventa.
 - No existe editor de bindings: el usuario no puede asignar ni cambiar roles en la UI.
 - Los bindings solo cubren variables y restricciones; el objetivo no tiene semántica propia.
 - Un template solo se puede cargar reemplazando el modelo actual. Si el modelo tiene cambios sin

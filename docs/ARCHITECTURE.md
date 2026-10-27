@@ -1,15 +1,17 @@
 # ARCHITECTURE — Optimization Sandbox
 
-**Estado:** M1 + M2A + M2B + M3 + M4 (pipeline, constructor de modelos, vista geométrica 2D y
-templates con semántica de escenario).
+**Estado:** M1 + M2A + M2B + M3 + M4 + M5 (pipeline, constructor de modelos, vista geométrica 2D,
+templates con semántica de escenario y primera Scenario View 3D).
 **Documento de referencia del contrato:** [`MODEL_SPEC.md`](./MODEL_SPEC.md).
 
 ---
 
 ## 1. Principio rector
 
-El producto es un laboratorio de optimización matemática. La cadena que debe funcionar y mantenerse
-limpia es:
+El producto es un sandbox de modelamiento matemático para optimización: el usuario construye un
+modelo y la aplicación le ayuda a comprender su formulación y el sistema que representa. La
+programación lineal continua es la primera familia de modelos soportada, no la identidad del
+producto. La cadena que debe funcionar y mantenerse limpia es:
 
 ```text
 modelo estructurado
@@ -26,8 +28,8 @@ interfaz
 La UI no contiene matemáticas del solver. El backend no contiene lógica de presentación. Ambos se
 comunican exclusivamente mediante el contrato descrito en `MODEL_SPEC.md`.
 
-Las visualizaciones futuras —matemática, geométrica o por escenarios— serán consumidoras de las
-mismas estructuras, nunca modelos paralelos.
+Las visualizaciones —matemática, geométrica o por escenarios— son consumidoras de las mismas
+estructuras, nunca modelos paralelos.
 
 ---
 
@@ -143,6 +145,31 @@ blanco) que solo referencia ids del modelo. El escenario nunca contiene matemát
 Cada cambio del modelo pasa por la poda, de modo que ningún binding apunta a un id inexistente. Un id
 reutilizado nunca hereda un significado antiguo. Detalle completo en [`SCENARIOS.md`](./SCENARIOS.md).
 
+### 2.7 Scenario View (M5)
+
+La segunda columna es el panel **Visualización** (`components/visualization-panel.tsx`) con tabs
+Geometría y, si el escenario tiene una vista registrada, Escenario. `components/scenario-views.ts`
+es el registro `scenario.metadata.id → vista`; es el único lugar que compara ids de escenario.
+
+```text
+OptimizationModel + ScenarioDefinition + {model, result} vigente
+        ↓  lib/product-mix-scene.ts      definition (sistema) + solution (estado)   puro
+        ↓  lib/product-mix-layout.ts     normalización y escala visual acotada       puro
+        ↓  components/scenario/product-mix-view.tsx    texto del sistema, estados, fallback
+        ↓  components/scenario/product-mix-canvas.tsx  React Three Fiber (solo cliente)
+```
+
+- `definition` existe antes de resolver: productos, recursos, capacidad (`rhs`) y consumos
+  (coeficientes). Se lee del modelo según las reglas del rol; nada se duplica en `scenario.json`.
+- `solution` solo existe con un resultado del modelo vigente (identidad `solved.model === model`):
+  cantidades, actividad, holgura y `active` del backend, más la explicación `a·x` por producto.
+- `Sandbox` comparte un `Highlight { constraintId, variableId }` de presentación entre editor,
+  geometría y escena; un par `{c, v}` resalta un único término.
+- El canvas se carga con `next/dynamic(..., { ssr: false })`; un error boundary y la detección de
+  WebGL aíslan los fallos del renderer.
+
+Detalle en [`SCENARIO_3D.md`](./SCENARIO_3D.md).
+
 ---
 
 ## 3. Flujo de una resolución
@@ -200,6 +227,7 @@ La URL del backend se configura con `NEXT_PUBLIC_SOLVER_URL` (por defecto
 │   ├── CURRENT_STATE.md
 │   ├── GEOMETRY.md
 │   ├── MODEL_SPEC.md
+│   ├── SCENARIO_3D.md
 │   └── SCENARIOS.md
 ├── templates/
 │   └── product-mix/
@@ -230,17 +258,28 @@ La URL del backend se configura con `NEXT_PUBLIC_SOLVER_URL` (por defecto
     │   ├── model-editor.tsx
     │   ├── model-start.tsx
     │   ├── results-panel.tsx
-    │   └── sandbox.tsx
+    │   ├── sandbox.tsx
+    │   ├── scenario-views.ts
+    │   ├── visualization-panel.tsx
+    │   └── scenario/
+    │       ├── product-mix-canvas.tsx
+    │       ├── product-mix-view.tsx
+    │       ├── scene-error-boundary.tsx
+    │       └── tones.ts
     ├── lib/
     │   ├── blank-model.ts
     │   ├── geometry.ts
     │   ├── format.ts
+    │   ├── highlight.ts
     │   ├── model-editing.ts
     │   ├── model.ts
     │   ├── number-input.ts
+    │   ├── product-mix-layout.ts
+    │   ├── product-mix-scene.ts
     │   ├── scenario.ts
     │   ├── solve.ts
-    │   └── templates.ts
+    │   ├── templates.ts
+    │   └── webgl.ts
     ├── next.config.ts
     ├── package.json
     ├── tsconfig.json
@@ -350,6 +389,39 @@ un significado a una variable nueva que recibe el mismo id. Por eso cada cambio 
 bindings huérfanos en la misma transición, y las búsquedas toleran referencias ausentes sin lanzar
 errores. No se implementa un sistema de migraciones ni avisos sobre bindings eliminados.
 
+### D15. La Scenario View representa el sistema; la solución es estado añadido
+
+La escena no es un panel de métricas en 3D. Su modelo derivado separa `definition` (el sistema que
+describe el modelo, disponible antes de resolver y actualizado con cada edición) y `solution` (lo
+que añade un resultado vigente). Resolver añade estado al sistema; no lo crea. Un resultado obsoleto,
+infactible, no acotado o erróneo deja el sistema visible y no aporta ningún valor de solución.
+
+### D16. El rol define una regla de lectura, no datos duplicados
+
+`ScenarioDefinition` dice qué significa cada entidad; las relaciones salen de la matemática. En una
+restricción `resource-capacity`, el coeficiente de un `product` es su consumo por unidad y el `rhs` la
+capacidad. La lectura solo se aplica si la forma es compatible (`<=`, `rhs >= 0`, consumos ≥ 0 y
+productos no negativos). En otro caso el recurso es «no interpretable como capacidad» y no se
+reinterpreta. Se descartó añadir consumos o unidades a `scenario.json`: duplicaría coeficientes que
+ya viven en el modelo. El contrato de M4 no cambió.
+
+### D17. `a·x` explica la actividad; `activity` sigue siendo la autoridad
+
+La descomposición del uso de un recurso por producto (`coeficiente · cantidad`) se calcula en el
+adapter del frontend. Es una evaluación del modelo en la solución, no una resolución. `activity`,
+`slack` y `active` siguen viniendo del backend (D3). Si la suma no coincide con `activity` dentro de
+`1e-7 · max(1, |activity|, max|a·x|)`, se marca la discrepancia y no se dibujan segmentos, sin
+ajustar ningún dato.
+
+### D18. React Three Fiber sin `drei`, cargado solo en el cliente
+
+`three` + `@react-three/fiber` permiten una escena declarativa y testeable por capas. `drei` se
+descartó porque solo hacían falta controles orbitales (incluidos en `three`) y etiquetas HTML
+ancladas (proyección propia), y añadía unas 20 dependencias transitivas. La escena es procedural,
+sin assets externos. El canvas es un chunk diferido con `ssr: false`, aislado por un error boundary.
+La escala visual se normaliza por recurso, porque las capacidades de recursos distintos no son
+comparables.
+
 ### D11. Geometría derivada y SVG nativo
 
 La geometría es una proyección desechable del contrato para exactamente dos variables. Se separan
@@ -415,6 +487,9 @@ Abrir `http://localhost:3000`. El backend expone documentación interactiva en
 - M4 añade `scenario.test.ts` (poda de bindings, ids reutilizados, renombrado, plantilla y modelo en
   blanco) y los tests de `sandbox.test.tsx` para el selector, los roles visibles, el cambio de modelo y
   el payload de `/solve`.
+- M5 añade `product-mix-scene.test.ts` (sistema, solución, descomposición, interpretabilidad,
+  obsolescencia, normalización y layout) y `scenario-view.test.tsx` (tabs, invalidación, hover
+  editor ↔ escena, desmontaje, fallos de WebGL y SSR) con el canvas sustituido por un doble.
 - Verificación manual E2E con Chrome y el backend real: construir desde la UI el modelo de tres
   variables `Max Z = 5x₁ + 8x₂ + 2x₃` (x₁ = 0, x₂ = 100, x₃ = 26,6667, Z = 853,3333), comprobar el
   aviso obsoleto, la cascada al eliminar una variable y el renombrado inline. Playwright no forma
@@ -422,11 +497,11 @@ Abrir `http://localhost:3000`. El backend expone documentación interactiva en
 
 ---
 
-## 9. Camino posterior (fuera de M1/M2A/M2B/M3/M4)
+## 9. Camino posterior (fuera de M1–M5)
 
-1. Scenario View: escena derivada de `OptimizationModel` + `ScenarioDefinition` + `OptimizationResult`.
-   Sin implementar; el contrato semántico de M4 es su punto de partida.
-2. Más templates y roles, sin sistema de plugins genérico.
+1. Más templates, roles y vistas de escenario, sin sistema de plugins genérico. Posibles extensiones
+   del escenario (unidades, semántica del objetivo) solo cuando una vista las necesite.
+2. Parámetros con nombre en el modelo, previa extensión de `MODEL_SPEC.md`.
 3. Otros tipos de variables y modelos, previa extensión de `MODEL_SPEC.md`.
 
 Ninguna de estas etapas debe introducir una representación paralela del modelo.

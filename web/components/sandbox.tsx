@@ -6,6 +6,12 @@ import { ModelEditor } from "@/components/model-editor";
 import { ModelStart } from "@/components/model-start";
 import { GeometricView } from "@/components/geometric-view";
 import { ResultsPanel } from "@/components/results-panel";
+import { scenarioViewFor } from "@/components/scenario-views";
+import {
+  VisualizationPanel,
+  type VisualizationTab,
+} from "@/components/visualization-panel";
+import { NO_HIGHLIGHT, type Highlight } from "@/lib/highlight";
 import type { OptimizationModel, OptimizationResult } from "@/lib/model";
 import { pruneScenario } from "@/lib/scenario";
 import {
@@ -37,6 +43,8 @@ type SolveOutcome =
       error: RequestError;
     };
 
+type ViewId = "geometry" | "scenario";
+
 export function Sandbox() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [isChoosing, setIsChoosing] = useState(false);
@@ -44,7 +52,12 @@ export function Sandbox() {
   const [pending, setPending] = useState<Workspace | null>(null);
   const [outcome, setOutcome] = useState<SolveOutcome | null>(null);
   const [isSolving, setIsSolving] = useState(false);
-  const [highlightedConstraintId, setHighlightedConstraintId] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<Highlight>(NO_HIGHLIGHT);
+  // The view chosen in the Visualización panel, remembered for the session.
+  // Geometry is the default because it exists for every two-variable model.
+  const [preferredView, setPreferredView] = useState<ViewId>("geometry");
+  // Identifies the opened workspace, so views of a replaced model remount.
+  const [workspaceKey, setWorkspaceKey] = useState(0);
   // Bumped whenever a different model replaces the workspace, so a solver
   // response that belongs to the previous model is discarded.
   const sessionRef = useRef(0);
@@ -59,7 +72,8 @@ export function Sandbox() {
     setPending(null);
     setIsSolving(false);
     setOutcome(null);
-    setHighlightedConstraintId(null);
+    setHighlight(NO_HIGHLIGHT);
+    setWorkspaceKey((key) => key + 1);
   }
 
   // Cancelling the chooser keeps the current workspace object untouched.
@@ -142,9 +156,25 @@ export function Sandbox() {
     );
   }
 
-  const { model } = workspace;
+  const { model, scenario } = workspace;
   const isStale = outcome?.kind === "result" && outcome.model !== model;
   const resultModel = outcome?.kind === "result" ? outcome.model : model;
+  const ScenarioView = scenarioViewFor(scenario);
+  const view: ViewId = ScenarioView ? preferredView : "geometry";
+  const tabs: VisualizationTab<ViewId>[] = [
+    { id: "geometry", label: "Geometría", meta: "Región factible · dos variables" },
+    ...(ScenarioView && scenario
+      ? [
+          {
+            id: "scenario" as const,
+            label: "Escenario",
+            meta: `${scenario.metadata.name} · sistema modelado`,
+          },
+        ]
+      : []),
+  ];
+  const highlightConstraint = (constraintId: string | null) =>
+    setHighlight({ constraintId, variableId: null });
 
   return (
     <>
@@ -156,10 +186,10 @@ export function Sandbox() {
           </p>
           <ModelEditor
             model={model}
-            scenario={workspace.scenario}
+            scenario={scenario}
             onChange={handleModelChange}
-            highlightedConstraintId={highlightedConstraintId}
-            onHighlight={setHighlightedConstraintId}
+            highlight={highlight}
+            onHighlight={setHighlight}
           />
           <div className="action-row">
             <button
@@ -179,13 +209,32 @@ export function Sandbox() {
             </button>
           </div>
         </div>
-        <GeometricView
-          model={model}
-          result={isStale ? null : result}
-          isStale={isStale}
-          highlightedConstraintId={highlightedConstraintId}
-          onHighlight={setHighlightedConstraintId}
-        />
+        <VisualizationPanel
+          key={workspaceKey}
+          tabs={tabs}
+          selected={view}
+          onSelect={setPreferredView}
+        >
+          {view === "scenario" && ScenarioView && scenario ? (
+            <ScenarioView
+              model={model}
+              scenario={scenario}
+              solved={outcome?.kind === "result" ? outcome : null}
+              isSolving={isSolving}
+              highlight={highlight}
+              onHighlight={setHighlight}
+              onResolve={handleSolve}
+            />
+          ) : (
+            <GeometricView
+              model={model}
+              result={isStale ? null : result}
+              isStale={isStale}
+              highlightedConstraintId={highlight.constraintId}
+              onHighlight={highlightConstraint}
+            />
+          )}
+        </VisualizationPanel>
       </div>
 
       <div aria-live="polite" aria-busy={isSolving}>

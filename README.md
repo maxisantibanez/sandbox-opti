@@ -1,18 +1,25 @@
 # Optimization Sandbox
 
-Laboratorio interactivo para construir, resolver y entender modelos de optimización matemática.
-La matemática es el núcleo: la interfaz no sustituye al modelo, lo hace visible.
+Sandbox de modelamiento matemático para optimización. El usuario construye un modelo con variables,
+función objetivo y restricciones, y la aplicación le ayuda a comprender tanto su formulación
+matemática como el sistema que ese modelo representa. La matemática es el núcleo: la interfaz no
+sustituye al modelo, lo hace visible.
+
+La programación lineal continua es la **primera familia de modelos soportada** y la que valida la
+arquitectura; no define el producto.
 
 Este repositorio contiene la vertical slice **M1**, el editor matemático interactivo **M2A**, el
-constructor de modelos **M2B**, la vista geométrica **M3** y los **templates** con semántica de
-escenario de **M4**: el mismo modelo lineal alimenta el editor, la geometría 2D y una solución
-explicada por HiGHS.
+constructor de modelos **M2B**, la vista geométrica **M3**, los **templates** con semántica de
+escenario de **M4** y la primera **Scenario View 3D** de **M5**. Un mismo modelo alimenta el editor,
+la geometría 2D, la escena del sistema modelado y una solución explicada por HiGHS.
 
 ```text
 Interactive Math Editor  →  OptimizationModel  →  FastAPI  →  HiGHS  →  OptimizationResult  →  UI
+                                   │                                          │
+ScenarioDefinition ────────────────┴──────→  Scenario View (sistema + solución) ←┘
 ```
 
-## Estado actual (M1 + M2A + M2B + M3 + M4)
+## Estado actual (M1 + M2A + M2B + M3 + M4 + M5)
 
 Al abrir la aplicación se elige un **modelo en blanco** o un **template**. El template Product Mix
 parte de este modelo, con sus variables llamadas «Producto A» y «Producto B»:
@@ -72,10 +79,28 @@ Cada operación estructural respeta el contrato: la UI nunca produce un modelo i
 está deshabilitado, y el selector «+ término» solo ofrece variables que aún no participan en esa
 expresión.
 
+### Scenario View 3D (M5)
+
+El panel **Visualización** ofrece **Geometría** y, cuando el template tiene una vista registrada,
+**Escenario**. En Product Mix, la escena *Production Floor* representa el sistema modelado:
+
+- antes de resolver: productos, recursos con su capacidad (`rhs`) y canales de consumo derivados de
+  los coeficientes del modelo, sin duplicarlos en `scenario.json`;
+- después de resolver: cantidades, uso de cada recurso descompuesto por producto (`a·x`), holgura y
+  restricciones activas (con tapa y etiqueta, no solo color);
+- al editar: el sistema se actualiza al instante y la solución anterior desaparece hasta resolver
+  de nuevo;
+- hover sincronizado con el editor, hasta el término exacto de una restricción.
+
+Las entidades sin semántica no reciben significado inventado. Un fallo de WebGL no afecta al editor
+ni al solver. Detalle en [`docs/SCENARIO_3D.md`](./docs/SCENARIO_3D.md).
+
 ## Stack
 
 - **Frontend:** Next.js 16, React 19, TypeScript, CSS propio.
 - **Geometría 2D:** funciones TypeScript puras y SVG nativo, sin dependencias adicionales.
+- **Scenario View 3D:** `three` + `@react-three/fiber`, geometría procedural sin assets externos ni
+  `drei`.
 - **Backend:** Python 3.11+, FastAPI, Pydantic, [`highspy`](https://github.com/ERGO-Code/HiGHS) (HiGHS).
 - **Sin** base de datos, autenticación, estado en servidor ni parser de texto.
 
@@ -86,6 +111,7 @@ docs/
   MODEL_SPEC.md          contrato canónico del modelo y del resultado
   ARCHITECTURE.md        componentes, fronteras y decisiones
   SCENARIOS.md           templates, ScenarioDefinition y bindings
+  SCENARIO_3D.md         Scenario View: sistema modelado, escena 3D y estados
 templates/
   product-mix/
     model.json           modelo de demostración compartido
@@ -99,8 +125,9 @@ solver/
   tests/
 web/
   app/                   página y estilos
-  components/            editor, vista geométrica, resultados y estado del sandbox
-  lib/                   contrato, edición, geometría 2D, números y cliente HTTP
+  components/            editor, visualización (geometría y escenario), resultados y estado
+    scenario/            vista Product Mix: texto del sistema y renderer WebGL
+  lib/                   contrato, edición, geometría 2D, escena derivada, números y cliente HTTP
 ```
 
 ## Requisitos
@@ -202,11 +229,12 @@ npm run build
 ```
 
 `npm test` ejecuta Vitest y Testing Library para el editor, la vista geométrica y los escenarios, más
-los tests puros de geometría 2D. Verificado en M4: 24 tests de backend y 117 de frontend.
+los tests puros de geometría 2D y de la escena derivada. El renderer WebGL se sustituye por un doble
+en jsdom. Verificado en M5: 24 tests de backend y 189 de frontend.
 
 ## Alcance actual
 
-Incluido en M1 + M2A + M2B + M3 + M4:
+Incluido en M1 + M2A + M2B + M3 + M4 + M5:
 
 - contrato canónico para LP continuos;
 - validación del modelo;
@@ -220,12 +248,14 @@ Incluido en M1 + M2A + M2B + M3 + M4:
   factible con bounds, óptimo vigente y restricciones activas;
 - estados geométricos para regiones vacías, infinitas y dimensiones no soportadas;
 - hover/foco entre editor y geometría, con layout responsive Modelo | Vista geométrica;
-- modelo en blanco y template Product Mix, con roles semánticos visibles y separados del modelo.
+- modelo en blanco y template Product Mix, con roles semánticos visibles y separados del modelo;
+- Scenario View 3D de Product Mix: sistema bipartito productos ↔ recursos derivado del modelo, estado
+  de la solución vigente, obsolescencia, hover con el editor y fallback sin WebGL.
 
 Todavía **no** incluido:
 
 - parser de texto libre;
-- vista geométrica 3D ni Scenario View;
+- vista geométrica 3D (tres variables) y escenas 3D para otros templates;
 - editor de bindings, persistencia, cuentas o colaboración;
 - variables enteras, MILP o modelos no lineales.
 
@@ -239,3 +269,4 @@ La hoja de ruta y los principios del producto están en [`VISION.md`](./VISION.m
 - [`docs/CURRENT_STATE.md`](./docs/CURRENT_STATE.md) — estado del proyecto para continuarlo.
 - [`docs/GEOMETRY.md`](./docs/GEOMETRY.md) — M3, algoritmo 2D, viewport, tolerancias y validación.
 - [`docs/SCENARIOS.md`](./docs/SCENARIOS.md) — M4, templates, ScenarioDefinition y bindings.
+- [`docs/SCENARIO_3D.md`](./docs/SCENARIO_3D.md) — M5, Scenario View y Production Floor 3D.

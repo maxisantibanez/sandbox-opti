@@ -5,6 +5,7 @@ import { useState } from "react";
 import { MathNumberInput } from "@/components/math-number-input";
 import { MathTextInput } from "@/components/math-text-input";
 import { formatNumber } from "@/lib/format";
+import { NO_HIGHLIGHT, type Highlight } from "@/lib/highlight";
 import {
   addConstraint,
   addConstraintTerm,
@@ -42,11 +43,17 @@ interface ModelEditorProps {
   /** Semantics of the loaded template, or null for a blank model. */
   scenario: ScenarioDefinition | null;
   onChange: (model: OptimizationModel) => void;
-  highlightedConstraintId?: string | null;
-  onHighlight?: (constraintId: string | null) => void;
+  /** Constraint, variable or single term focused in any view. */
+  highlight?: Highlight;
+  onHighlight?: (highlight: Highlight) => void;
 }
 
-export function ModelEditor({ model, scenario, onChange, highlightedConstraintId, onHighlight }: ModelEditorProps) {
+export function ModelEditor({ model, scenario, onChange, highlight = NO_HIGHLIGHT, onHighlight }: ModelEditorProps) {
+  // A variable alone (a product) marks all its terms; with a constraint, only
+  // the term of that constraint.
+  const objectiveVariableId =
+    highlight.constraintId === null ? highlight.variableId : null;
+
   // Presentation-only state: reports structural side effects of an edit, such
   // as constraints that disappear when a variable removal empties them.
   const [cascadeNotice, setCascadeNotice] = useState<string | null>(null);
@@ -109,6 +116,10 @@ export function ModelEditor({ model, scenario, onChange, highlightedConstraintId
           variablesById={variablesById}
           context="la función objetivo"
           canRemove={model.objective.terms.length > 1}
+          highlightedVariableId={objectiveVariableId}
+          onHighlightTerm={(variableId) =>
+            onHighlight?.({ constraintId: null, variableId })
+          }
           onCoefficientChange={(variableId, coefficient) =>
             apply(
               setObjectiveCoefficient(model, variableId, coefficient),
@@ -137,7 +148,13 @@ export function ModelEditor({ model, scenario, onChange, highlightedConstraintId
                 variablesById={variablesById}
                 scenario={scenario}
                 onApply={apply}
-                highlighted={constraint.id === highlightedConstraintId}
+                highlighted={constraint.id === highlight.constraintId}
+                highlightedVariableId={
+                  highlight.constraintId === null ||
+                  highlight.constraintId === constraint.id
+                    ? highlight.variableId
+                    : null
+                }
                 onHighlight={onHighlight}
               />
             ))}
@@ -158,7 +175,14 @@ export function ModelEditor({ model, scenario, onChange, highlightedConstraintId
             const removalBlock = variableRemovalBlockReason(variable.id);
 
             return (
-              <span className="bounds-item" key={variable.id}>
+              <span
+                className={
+                  variable.id === objectiveVariableId
+                    ? "bounds-item is-highlighted"
+                    : "bounds-item"
+                }
+                key={variable.id}
+              >
                 {variable.lowerBound !== null &&
                 variable.upperBound !== null ? (
                   <span className="bounds-constraint">
@@ -221,6 +245,7 @@ function ConstraintEditor({
   scenario,
   onApply,
   highlighted,
+  highlightedVariableId,
   onHighlight,
 }: {
   model: OptimizationModel;
@@ -229,14 +254,16 @@ function ConstraintEditor({
   scenario: ScenarioDefinition | null;
   onApply: (model: OptimizationModel) => void;
   highlighted: boolean;
-  onHighlight?: (constraintId: string | null) => void;
+  highlightedVariableId: string | null;
+  onHighlight?: (highlight: Highlight) => void;
 }) {
+  const own = { constraintId: constraint.id, variableId: null };
   return (
     <li data-constraint-id={constraint.id} className={highlighted ? "is-highlighted" : undefined}
-      onMouseEnter={() => onHighlight?.(constraint.id)} onMouseLeave={() => onHighlight?.(null)}
-      onFocusCapture={() => onHighlight?.(constraint.id)}
+      onMouseEnter={() => onHighlight?.(own)} onMouseLeave={() => onHighlight?.(NO_HIGHLIGHT)}
+      onFocusCapture={() => onHighlight?.(own)}
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHighlight?.(null);
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHighlight?.(NO_HIGHLIGHT);
       }}>
       <MathTextInput
         value={constraint.name}
@@ -255,6 +282,10 @@ function ConstraintEditor({
           variablesById={variablesById}
           context={constraint.name}
           canRemove={constraint.terms.length > 1}
+          highlightedVariableId={highlightedVariableId}
+          onHighlightTerm={(variableId) =>
+            onHighlight?.({ constraintId: constraint.id, variableId })
+          }
           onCoefficientChange={(variableId, coefficient) =>
             onApply(
               setConstraintCoefficient(
@@ -319,6 +350,8 @@ function EditableTerms({
   variablesById,
   context,
   canRemove,
+  highlightedVariableId,
+  onHighlightTerm,
   onCoefficientChange,
   onRemove,
 }: {
@@ -326,6 +359,9 @@ function EditableTerms({
   variablesById: Map<string, Variable>;
   context: string;
   canRemove: boolean;
+  highlightedVariableId: string | null;
+  /** Hovering a term focuses that term; leaving it returns to the expression. */
+  onHighlightTerm: (variableId: string | null) => void;
   onCoefficientChange: (variableId: string, coefficient: number) => void;
   onRemove: (variableId: string) => void;
 }) {
@@ -336,7 +372,17 @@ function EditableTerms({
           variablesById.get(term.variableId)?.name ?? term.variableId;
 
         return (
-          <span className="math-term" key={term.variableId}>
+          <span
+            className={
+              term.variableId === highlightedVariableId
+                ? "math-term is-highlighted"
+                : "math-term"
+            }
+            data-variable-id={term.variableId}
+            key={term.variableId}
+            onMouseEnter={() => onHighlightTerm(term.variableId)}
+            onMouseLeave={() => onHighlightTerm(null)}
+          >
             {index > 0 ? <span className="math-operator">+</span> : null}
             <MathNumberInput
               value={term.coefficient}

@@ -29,16 +29,8 @@ export function GeometricView({ model, result, isStale, highlightedConstraintId,
   const geometry = useMemo(() => computeGeometry(model, resultPoint(model, currentResult)), [model, currentResult]);
   const activeIds = new Set(currentResult?.constraints.filter((row) => row.active).map((row) => row.constraintId));
 
-  const heading = (
-    <div className="section-heading">
-      <span className="section-index">02</span>
-      <h2 id="geometry-heading">Vista geométrica</h2>
-      <span className="section-meta">LP · dos variables</span>
-    </div>
-  );
   if (geometry.status === "unsupported" || geometry.status === "numerical-error") {
-    return <section className="geometry-panel" aria-labelledby="geometry-heading">
-      {heading}
+    return <div className="geometry-panel">
       <div className="geometry-empty" role="status">
         <p className="geometry-empty-symbol" aria-hidden="true">{geometry.status === "unsupported" ? "ℝ²" : "≈"}</p>
         <p>{geometry.status === "unsupported"
@@ -46,7 +38,7 @@ export function GeometricView({ model, result, isStale, highlightedConstraintId,
           : "La escala numérica supera la precisión de esta vista. Reescala los coeficientes para visualizarla."}</p>
         <p className="technical-note">Puedes seguir editando y resolviendo el modelo con HiGHS.</p>
       </div>
-    </section>;
+    </div>;
   }
 
   const { viewport, boundaries, region } = geometry;
@@ -67,8 +59,7 @@ export function GeometricView({ model, result, isStale, highlightedConstraintId,
   const infeasible = geometry.status === "infeasible";
 
   return (
-    <section className="geometry-panel" aria-labelledby="geometry-heading">
-      {heading}
+    <div className="geometry-panel">
       <p className={`geometry-state${infeasible ? " geometry-state-error" : ""}`} role="status">
         {infeasible ? "Sin región factible" : geometry.status === "unbounded" ? "Región factible no acotada" : "Región factible acotada"}
       </p>
@@ -146,7 +137,7 @@ export function GeometricView({ model, result, isStale, highlightedConstraintId,
         </button>)}
       </div>
       <p className="technical-note geometry-hint">Pasa sobre una restricción o enfoca su nombre para explorar su frontera y su lado permitido.</p>
-    </section>
+    </div>
   );
 }
 

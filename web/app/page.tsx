@@ -4,19 +4,19 @@ export default function Home() {
   return (
     <main className="page">
       <header className="masthead">
-        <p className="eyebrow">Laboratorio de optimización lineal</p>
+        <p className="eyebrow">Sandbox de modelamiento matemático para optimización</p>
         <h1>Optimization Sandbox</h1>
         <p className="lede">
-          Un modelo matemático, su solución y las restricciones que la
-          determinan. Sin cajas negras: la matemática es la interfaz.
+          Un modelo matemático, el sistema que representa y la solución que
+          produce. Sin cajas negras: la matemática es la interfaz.
         </p>
       </header>
 
       <Sandbox />
 
       <footer className="page-footer">
-        <span>Optimization Sandbox · M4</span>
-        <span>Un modelo · matemática, geometría y solución</span>
+        <span>Optimization Sandbox · M5</span>
+        <span>Un modelo · matemática, geometría, escenario y solución</span>
       </footer>
     </main>
   );

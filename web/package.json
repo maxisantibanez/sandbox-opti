@@ -9,9 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.8.2",
     "next": "^16.4.3",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
@@ -21,6 +23,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.2",
     "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
