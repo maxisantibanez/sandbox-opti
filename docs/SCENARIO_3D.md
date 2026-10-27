@@ -335,3 +335,89 @@ recurso: 50 unidades.»
   se compactan y la leyenda textual conserva todos los valores.
 - No hay tests de render WebGL real: la geometría de la escena se verifica en la capa pura y
   manualmente en navegador.
+
+## 15. Cómo continuar M5
+
+### Arranque local
+
+Dos terminales, igual que en el README:
+
+```powershell
+# backend (puerto 8000)
+cd solver
+.\.venv\Scripts\python.exe -m uvicorn optimization_sandbox.api:app --reload --port 8000
+
+# frontend (puerto 3000)
+cd web
+npm run dev
+```
+
+Los puertos importan: CORS del backend solo admite `localhost:3000` / `127.0.0.1:3000` por defecto
+y el frontend llama a `127.0.0.1:8000` salvo que se defina `NEXT_PUBLIC_SOLVER_URL`.
+
+### Dónde tocar cada cosa
+
+| Cambio | Archivo | Revisar también |
+| --- | --- | --- |
+| Qué entidades y relaciones se leen del modelo, reglas de un rol | `lib/product-mix-scene.ts` → `buildDefinition` | `product-mix-scene.test.ts`, §3 y `SCENARIOS.md` §9 |
+| Estado de la solución, obsolescencia, `a·x`, tolerancia | `lib/product-mix-scene.ts` → `buildSolution`, `DECOMPOSITION_TOLERANCE` | §4, `ARCHITECTURE.md` D17 |
+| Escalas visuales (alturas, anchos, separación de filas) | `lib/product-mix-layout.ts` → `FLOOR` | tests de layout, §5 |
+| Colores de productos y escena | `components/scenario/tones.ts` | legibilidad en escala de grises |
+| Forma de pedestales, recipientes, tapas y canales | `components/scenario/product-mix-canvas.tsx` (`PLINTH_HEIGHT`, `VESSEL_WIDTH`, `ResourceStation`, `ProductStation`, `Channel`) | §6 |
+| Cámara, encuadre y límites de órbita | `product-mix-canvas.tsx` (`CAMERA_*`, `TARGET_HEIGHT`, `FRAMING`, `CameraRig`) | §7 |
+| Texto de etiquetas 3D | `product-mix-view.tsx` → `sceneLabels` | CSS `.scene-label*` en `app/globals.css` |
+| Posición de etiquetas | `product-mix-canvas.tsx` → `LabelProjector` | — |
+| Mensajes de estado, explicación del hover, leyenda textual | `product-mix-view.tsx` (`SolutionStatus`, `describeHighlight`, `SystemReadout`, `ISSUE_COPY`) | `scenario-view.test.tsx` |
+| Tabs, vista inicial y preferencia de sesión | `components/sandbox.tsx` (`preferredView`) y `components/visualization-panel.tsx` | §8 |
+| Resaltado compartido editor ↔ vistas | `lib/highlight.ts`, `components/model-editor.tsx` | §10 |
+| Detección de WebGL y fallback | `lib/webgl.ts`, `scene-error-boundary.tsx`, `product-mix-view.tsx` | §11 |
+
+**Nueva vista de escenario:** un adapter puro propio (como `product-mix-scene.ts`), su componente de
+vista y **una entrada** en `components/scenario-views.ts`. Ningún otro archivo debe comparar ids de
+escenario. Si necesita un rol nuevo, se añade en `lib/scenario.ts` con su regla de lectura documentada
+en `SCENARIOS.md`.
+
+### Invariantes que no se deben romper
+
+- `OptimizationModel`, `OptimizationResult`, `ScenarioDefinition`, `/solve` y el backend no conocen
+  la escena. Nada visual entra en esos contratos.
+- Ningún número de la escena está escrito a mano: todo sale del modelo, del escenario o del
+  resultado vigente.
+- Un resultado solo cuenta si `solved.model === model`; un resultado obsoleto no aporta nada.
+- `activity`, `slack` y `active` vienen del backend; `a·x` solo explica y nunca se ajusta.
+- Ninguna magnitud matemática se usa directamente como coordenada: pasa por `FLOOR`.
+- El canvas solo se carga en el cliente (`ssr: false`) y sus fallos quedan dentro del error boundary.
+- `useFrame` solo proyecta etiquetas o interpola barras; los datos derivados se calculan con
+  `useMemo` fuera del bucle.
+
+### Tests
+
+- La lógica nueva va primero a `lib/product-mix-scene.test.ts`, sin React.
+- `components/scenario-view.test.tsx` sustituye `product-mix-canvas` con `vi.mock` por un doble que
+  expone el `layout`, las `labels` y el `highlight` que recibe, y mockea `supportsWebGL`. Si cambian
+  las props del canvas, hay que actualizar el doble. No se intenta render WebGL en jsdom.
+- Antes de cerrar un cambio: `pytest`, `npm test` y `npm run build` en verde, más una prueba en
+  navegador con el backend real.
+
+### Trampas al verificar en navegador
+
+- Con `frameloop="demand"` la escena solo se dibuja cuando la pestaña es visible. En un navegador
+  embebido u oculto el canvas puede parecer vacío y las etiquetas no tener posición hasta que la
+  página se muestra.
+- Fast Refresh conserva el estado de React y no vuelve a ejecutar el encuadre de la cámara si sus
+  dependencias no cambian: tras tocar constantes de cámara, recargar la página.
+- Los eventos sintéticos pueden traer `offsetX` erróneo en navegadores embebidos o con emulación de
+  viewport. Por eso el puntero se calcula con `clientX/Y`; al automatizar hovers, despachar eventos
+  con `clientX/Y` reales.
+- Las posiciones proyectadas de las etiquetas (`style.transform` de `.scene-label`) sirven para
+  apuntar a cada objeto en pruebas automatizadas: bajo la etiqueta de un recurso está su recipiente y
+  la etiqueta de un canal está sobre el canal.
+- Cambiar un `<select>` o un `<input>` de React por script exige el setter nativo de `value` y un
+  evento `change`/`input`; asignar el valor del DOM no actualiza el modelo.
+
+### Posibles siguientes pasos (no comprometidos)
+
+- Dibujar las cotas superiores de los productos como límite de la columna.
+- Unidades opcionales para recursos y productos, si el escenario llega a definirlas.
+- Evitar colisiones de etiquetas con muchas entidades.
+- Una vista de escenario para un segundo template, para validar el registro con más de una entrada.

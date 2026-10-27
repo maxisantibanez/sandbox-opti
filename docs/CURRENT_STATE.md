@@ -128,8 +128,13 @@ paralela y sin cambios en el backend.
 │ web/                                │
 │ Next.js 16 + React 19 + TypeScript  │
 │                                     │
-│ estado: OptimizationModel           │
+│ estado: workspace                   │
+│   model     OptimizationModel       │
+│   scenario  ScenarioDefinition|null │
 │ editor inline                       │
+│ visualización                       │
+│   Geometría  SVG (M3)               │
+│   Escenario  three + R3F (M5)       │
 │ panel de resultados                 │
 └──────────────────┬──────────────────┘
                    │ HTTP/JSON
@@ -150,6 +155,8 @@ paralela y sin cambios en el backend.
 - **Sin** parser de modelos.
 - **Sin** lógica del solver en el frontend.
 - **Sin** lógica de presentación en el backend.
+- **Sin** semántica de escenario en el backend: `ScenarioDefinition` y la escena viven solo en el
+  frontend.
 
 La explicación completa de componentes y decisiones está en
 [`ARCHITECTURE.md`](./ARCHITECTURE.md).
@@ -178,6 +185,22 @@ La explicación completa de componentes y decisiones está en
 Desde M3, el modelo vigente también alimenta `lib/geometry.ts` → `GeometricView`. El resultado
 vigente aporta únicamente el óptimo y las restricciones activas. Editar oculta el punto anterior;
 la geometría se actualiza sin esperar una nueva resolución.
+
+Desde M5, la segunda columna es el panel **Visualización**. `scenarioViewFor(workspace.scenario)`
+(`components/scenario-views.ts`) decide si existe la tab **Escenario**; para Product Mix:
+
+10. `lib/product-mix-scene.ts` lee el **sistema** (`definition`) del modelo y del escenario:
+    productos, recursos, capacidad desde `rhs` y consumos desde coeficientes. Se recalcula con cada
+    edición, sin resolver.
+11. La **solución** (`solution`) solo se añade si la última resolución corresponde a este mismo
+    objeto de modelo (`outcome.model === model`). Aporta cantidades, `activity`/`slack`/`active` del
+    backend y la explicación `a·x` por producto.
+12. `lib/product-mix-layout.ts` normaliza y escala; `components/scenario/product-mix-canvas.tsx`
+    dibuja con React Three Fiber, cargado solo en el cliente.
+13. Hover y foco comparten un `Highlight { constraintId, variableId }` entre editor, geometría y
+    escena. Nunca modifica el modelo ni invalida resultados.
+
+Detalle en [`SCENARIO_3D.md`](./SCENARIO_3D.md).
 
 ---
 
