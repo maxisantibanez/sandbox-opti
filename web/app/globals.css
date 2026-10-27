@@ -480,6 +480,29 @@ h2 {
   max-width: 680px;
 }
 
+.replace-notice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding: 9px 0 9px 14px;
+  border-left: 2px solid var(--error);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.replace-notice p {
+  margin: 0;
+}
+
+.replace-actions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
 .section-action {
   margin-left: auto;
 }

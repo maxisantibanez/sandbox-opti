@@ -678,6 +678,119 @@ describe("semantic bindings in the editor", () => {
   });
 });
 
+describe("replacing unsaved work", () => {
+  async function renameProductA(user: User, name: string) {
+    const field = screen.getByLabelText("Nombre de la variable Producto A");
+    await user.clear(field);
+    await user.type(field, name);
+  }
+
+  it("replaces an untouched model without asking", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+
+    expect(screen.getByText("Modelo en blanco")).toBeInTheDocument();
+    expect(
+      screen.queryByText("El modelo actual tiene cambios sin conservar."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks before replacing a modified model and keeps it on confirmation cancel", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await renameProductA(user, "Mesas");
+    await solve(user);
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+
+    expect(
+      screen.getByText("El modelo actual tiene cambios sin conservar."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Modelo en blanco")).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole("group", { name: "Confirmar reemplazo del modelo" })).getByRole(
+        "button",
+        { name: "Cancelar" },
+      ),
+    );
+
+    // Exactly the same workspace: the rename and the current solution remain.
+    expect(screen.getByLabelText("Nombre de la variable Mesas")).toHaveValue("Mesas");
+    expect(screen.getByText("Solución óptima")).toBeInTheDocument();
+    expect(
+      screen.queryByText("El modelo cambió desde la última resolución."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("El modelo actual tiene cambios sin conservar."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("loads the new workspace when the replacement is confirmed", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await renameProductA(user, "Mesas");
+    await solve(user);
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Reemplazar por Modelo en blanco" }),
+    );
+
+    expect(screen.getByText("Modelo en blanco")).toBeInTheDocument();
+    expect(screen.queryByText("Solución óptima")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Nombre de la variable Mesas")).not.toBeInTheDocument();
+  });
+
+  it("asks again when a different template is chosen during confirmation", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await renameProductA(user, "Mesas");
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+    await user.click(screen.getByRole("button", { name: /^Product Mix/ }));
+
+    expect(
+      screen.getByRole("button", { name: "Reemplazar por Product Mix" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reemplazar por Modelo en blanco" })).not.toBeInTheDocument();
+  });
+
+  it("does not ask when every edit was reverted", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await renameProductA(user, "Mesas");
+    const renamed = screen.getByLabelText("Nombre de la variable Mesas");
+    await user.clear(renamed);
+    await user.type(renamed, "Producto A");
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+
+    expect(screen.getByText("Modelo en blanco")).toBeInTheDocument();
+    expect(
+      screen.queryByText("El modelo actual tiene cambios sin conservar."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not ask after only solving an untouched model", async () => {
+    const user = userEvent.setup();
+    await renderProductMix(user);
+
+    await solve(user);
+    await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
+    await user.click(screen.getByRole("button", { name: /En blanco/ }));
+
+    expect(screen.getByText("Modelo en blanco")).toBeInTheDocument();
+  });
+});
+
 describe("switching models", () => {
   it("replaces the whole state when another model is chosen", async () => {
     const user = userEvent.setup();
@@ -690,6 +803,9 @@ describe("switching models", () => {
 
     await user.click(screen.getByRole("button", { name: "Nuevo modelo" }));
     await user.click(screen.getByRole("button", { name: /En blanco/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Reemplazar por Modelo en blanco" }),
+    );
 
     expect(screen.getByText("Modelo en blanco")).toBeInTheDocument();
     expect(

@@ -6,19 +6,19 @@ import { ModelEditor } from "@/components/model-editor";
 import { ModelStart } from "@/components/model-start";
 import { GeometricView } from "@/components/geometric-view";
 import { ResultsPanel } from "@/components/results-panel";
-import { createBlankModel } from "@/lib/blank-model";
 import type { OptimizationModel, OptimizationResult } from "@/lib/model";
-import {
-  categoryLabel,
-  pruneScenario,
-  type ScenarioDefinition,
-} from "@/lib/scenario";
-import type { Template } from "@/lib/templates";
+import { pruneScenario } from "@/lib/scenario";
 import {
   solveModel,
   SolveRequestError,
   type SolveIssue,
 } from "@/lib/solve";
+import {
+  blankWorkspace,
+  hasUnsavedChanges,
+  templateWorkspace,
+  type Workspace,
+} from "@/lib/workspace";
 
 interface RequestError {
   message: string;
@@ -37,41 +37,11 @@ type SolveOutcome =
       error: RequestError;
     };
 
-/**
- * The model being edited plus, optionally, the semantics of the template it came
- * from. Exactly one OptimizationModel lives here; the scenario only references it
- * by stable ids and is never sent to the solver.
- */
-interface Workspace {
-  title: string;
-  subtitle: string;
-  model: OptimizationModel;
-  scenario: ScenarioDefinition | null;
-}
-
-function blankWorkspace(): Workspace {
-  return {
-    title: "Modelo en blanco",
-    subtitle: "Sin semántica · LP continuo",
-    model: createBlankModel(),
-    scenario: null,
-  };
-}
-
-function templateWorkspace(template: Template): Workspace {
-  const { metadata } = template.scenario;
-
-  return {
-    title: metadata.name,
-    subtitle: `${categoryLabel(metadata.category)} · LP continuo`,
-    model: structuredClone(template.model),
-    scenario: template.scenario,
-  };
-}
-
 export function Sandbox() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [isChoosing, setIsChoosing] = useState(false);
+  // A chosen workspace waiting for confirmation because the current one has unsaved changes.
+  const [pending, setPending] = useState<Workspace | null>(null);
   const [outcome, setOutcome] = useState<SolveOutcome | null>(null);
   const [isSolving, setIsSolving] = useState(false);
   const [highlightedConstraintId, setHighlightedConstraintId] = useState<string | null>(null);
@@ -86,9 +56,24 @@ export function Sandbox() {
     sessionRef.current += 1;
     setWorkspace(next);
     setIsChoosing(false);
+    setPending(null);
     setIsSolving(false);
     setOutcome(null);
     setHighlightedConstraintId(null);
+  }
+
+  // Cancelling the chooser keeps the current workspace object untouched.
+  function closeChooser() {
+    setPending(null);
+    setIsChoosing(false);
+  }
+
+  function requestWorkspace(next: Workspace) {
+    if (workspace && hasUnsavedChanges(workspace)) {
+      setPending(next);
+      return;
+    }
+    openWorkspace(next);
   }
 
   function handleModelChange(next: OptimizationModel) {
@@ -145,9 +130,14 @@ export function Sandbox() {
   if (workspace === null || isChoosing) {
     return (
       <ModelStart
-        onBlank={() => openWorkspace(blankWorkspace())}
-        onTemplate={(template) => openWorkspace(templateWorkspace(template))}
-        onCancel={workspace ? () => setIsChoosing(false) : undefined}
+        onBlank={() => requestWorkspace(blankWorkspace())}
+        onTemplate={(template) => requestWorkspace(templateWorkspace(template))}
+        onCancel={workspace ? closeChooser : undefined}
+        replacement={
+          pending
+            ? { title: pending.title, onConfirm: () => openWorkspace(pending) }
+            : null
+        }
       />
     );
   }

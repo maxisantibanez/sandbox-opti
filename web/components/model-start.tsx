@@ -8,9 +8,11 @@ interface ModelStartProps {
   onTemplate: (template: Template) => void;
   /** Present when a model already exists, so the user can keep editing it. */
   onCancel?: () => void;
+  /** A choice waiting for confirmation because the current model has unsaved changes. */
+  replacement?: { title: string; onConfirm: () => void } | null;
 }
 
-export function ModelStart({ onBlank, onTemplate, onCancel }: ModelStartProps) {
+export function ModelStart({ onBlank, onTemplate, onCancel, replacement }: ModelStartProps) {
   return (
     <section className="model-start" aria-labelledby="start-heading">
       <div className="section-heading">
@@ -22,6 +24,22 @@ export function ModelStart({ onBlank, onTemplate, onCancel }: ModelStartProps) {
           </button>
         ) : null}
       </div>
+
+      {replacement ? (
+        <div className="replace-notice" role="group" aria-label="Confirmar reemplazo del modelo">
+          <p>El modelo actual tiene cambios sin conservar.</p>
+          <div className="replace-actions">
+            <button type="button" className="text-button" onClick={replacement.onConfirm}>
+              Reemplazar por {replacement.title}
+            </button>
+            {onCancel ? (
+              <button type="button" className="text-button" onClick={onCancel}>
+                Cancelar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <ul className="start-options">
         <li>

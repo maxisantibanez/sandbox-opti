@@ -450,7 +450,7 @@ El modelo cambió desde la última resolución.   [Resolver nuevamente]
 - API: un campo `scenario` se rechaza con `422` (la semántica no llega al solver);
 - API: un LP sin restricciones (modelo en blanco) se resuelve y da `unbounded`.
 
-### Frontend — 117 tests
+### Frontend — 128 tests
 
 
 - parseo y formato de números editables (coma, punto, exponente, incompletos);
@@ -565,7 +565,7 @@ npm run build
 Estado verificado en la última ejecución:
 
 - backend: **24 passed**;
-- frontend: **117 passed**;
+- frontend: **128 passed**;
 - `npm run build`: correcto.
 
 ---
@@ -664,5 +664,25 @@ conocido (Template), sin tocar `OptimizationModel` ni el contrato HTTP.
 Detalle, lifecycle y limitaciones en [`SCENARIOS.md`](./SCENARIOS.md). Decisiones D12–D14 en
 [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-Riesgo conocido: elegir un template reemplaza el modelo sin confirmación, porque el proyecto no tiene
-ningún mecanismo previo de protección contra cambios sin guardar.
+Riesgo resuelto en el checkpoint de estabilización (sección 23): si el modelo tiene cambios sin
+conservar, elegir otro modelo pide confirmación.
+
+---
+
+## 23. Checkpoint de estabilización
+
+Sin nuevas funcionalidades matemáticas ni visualizaciones.
+
+- **Git:** el repositorio se inicializa en `main`. `.gitignore` excluye `node_modules/`, `.next/`,
+  `.venv/`, cachés de Python (`__pycache__/`, `.pytest_cache/`, `*.egg-info/`), `*.tsbuildinfo`,
+  `coverage/`, logs y temporales, y los `.env*` locales (solo `.env.example` se versiona).
+- **Primer commit:** `ff274fb` con el estado completo M1–M4 (54 archivos, sin cachés ni secretos).
+- **Reemplazo de modelo con confirmación:** `lib/workspace.ts` compara el modelo actual con
+  `origin`, el modelo con el que se abrió el workspace. Si hay diferencias, elegir «En blanco» u otro
+  template muestra una confirmación discreta («El modelo actual tiene cambios sin conservar.») con
+  «Reemplazar por …» y «Cancelar». Cancelar conserva exactamente el workspace (modelo, resultado y
+  edición); Reemplazar carga el nuevo. Deshacer todas las ediciones devuelve el modelo a «sin cambios».
+  Los resultados del solver no cuentan como trabajo del usuario.
+- **Fuera de alcance:** sin persistencia, sin `beforeunload` ni protecciones del navegador.
+
+Estado verificado: backend **24 passed**, frontend **128 passed**, `npm run build` correcto.

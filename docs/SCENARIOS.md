@@ -187,8 +187,8 @@ de escenas. El contrato de bindings es lo único que se prepara.
 - Solo hay dos roles: `product` (variables) y `resource-capacity` (restricciones).
 - No existe editor de bindings: el usuario no puede asignar ni cambiar roles en la UI.
 - Los bindings solo cubren variables y restricciones; el objetivo no tiene semántica propia.
-- Un template solo se puede cargar reemplazando el modelo actual. La UI no pide confirmación, porque
-  no existe ningún mecanismo previo de protección contra cambios sin guardar.
+- Un template solo se puede cargar reemplazando el modelo actual. Si el modelo tiene cambios sin
+  conservar, la UI pide confirmación antes de reemplazarlo (ver `CURRENT_STATE.md`, sección 23).
 - No hay persistencia: ni modelos ni escenarios se guardan entre sesiones.
 - El backend no conoce los escenarios y debe seguir así; `/solve` rechaza cualquier campo extra.
 - Solo hay un template. La estructura lo admite, pero no se probó con varios.
